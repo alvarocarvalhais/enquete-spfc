@@ -527,8 +527,6 @@ async function vote() {
     localStorage.setItem(VOTER_KEY, JSON.stringify({
       nome:  document.getElementById('nome').value.trim(),
       email: document.getElementById('email').value.trim(),
-      cpf:   document.getElementById('cpf').value.trim(),
-      nasc:  document.getElementById('nasc').value.trim(),
       voto:  selName
     }));
     renderResults(true);
@@ -573,13 +571,36 @@ async function renderResults(isNewVote = false) {
     const win = c.votes===max && c.votes>0;
     const row = document.createElement('div');
     row.className = 'result-row'+(win?' winner':'');
-    row.innerHTML = `
-      <div class="result-row-header">
-        <span class="result-name">${c.name}${win?' 🏆':''}</span>
-        <span class="result-pct">${pct}%</span>
-      </div>
-      <div class="result-count">${c.votes.toLocaleString('pt-BR')} voto${c.votes!==1?'s':''}</div>
-      <div class="bar-track"><div class="bar-fill" data-pct="${pct}"></div></div>`;
+
+    /* Monta DOM via textContent para evitar XSS */
+    const header = document.createElement('div');
+    header.className = 'result-row-header';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'result-name';
+    nameSpan.textContent = c.name + (win ? ' 🏆' : '');
+
+    const pctSpan = document.createElement('span');
+    pctSpan.className = 'result-pct';
+    pctSpan.textContent = pct + '%';
+
+    header.appendChild(nameSpan);
+    header.appendChild(pctSpan);
+
+    const countDiv = document.createElement('div');
+    countDiv.className = 'result-count';
+    countDiv.textContent = `${c.votes.toLocaleString('pt-BR')} voto${c.votes!==1?'s':''}`;
+
+    const track = document.createElement('div');
+    track.className = 'bar-track';
+    const fill = document.createElement('div');
+    fill.className = 'bar-fill';
+    fill.dataset.pct = pct;
+    track.appendChild(fill);
+
+    row.appendChild(header);
+    row.appendChild(countDiv);
+    row.appendChild(track);
     barsEl.appendChild(row);
   });
   document.getElementById('totalVotesLabel').textContent = total > 0 ? `${total.toLocaleString('pt-BR')} votos registrados` : 'Nenhum voto ainda — seja o primeiro!';
