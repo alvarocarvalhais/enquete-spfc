@@ -1,0 +1,21 @@
+# Dependências
+node_modules/
+.npm
+
+# Variáveis de ambiente — NUNCA subir tokens aqui
+.env
+.env.local
+.env.*.local
+
+# Vercel
+.vercel
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
