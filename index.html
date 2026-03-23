@@ -392,22 +392,21 @@ const VOTER_KEY = 'spfc_voter_local';
 const hasVotedLocally = () => localStorage.getItem(VOTED_KEY) === '1';
 const getLocalVoter   = () => { try { return JSON.parse(localStorage.getItem(VOTER_KEY))||{}; } catch { return {}; } };
 
-async function incSharedVote(key) {
-  let current = 0;
-  try { const res = await window.storage.get(key, true); if (res?.value) current = parseInt(res.value,10)||0; } catch {}
-  await window.storage.set(key, String(current + 1), true);
+/* ── API calls reais (Vercel → Google Sheets) ── */
+async function apiVote(payload) {
+  const res = await fetch('/api/vote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error('vote failed: ' + res.status);
+  return res.json();
 }
-async function getSharedVoteCount(key) {
-  try { const res = await window.storage.get(key, true); return res?.value ? (parseInt(res.value,10)||0) : 0; } catch { return 0; }
-}
-async function setSharedString(key, value) {
-  try { await window.storage.set(key, value, true); } catch {}
-}
-async function getSharedString(key) {
-  try { const res = await window.storage.get(key, true); return res ? res.value : null; } catch { return null; }
-}
-async function listOutroKeys() {
-  try { const res = await window.storage.list('spfc:vote:outro:', true); return res?.keys || []; } catch { return []; }
+
+async function apiResults() {
+  const res = await fetch('/api/results');
+  if (!res.ok) throw new Error('results failed: ' + res.status);
+  return res.json();
 }
 
 function setProgress(step) {
@@ -516,13 +515,14 @@ async function vote() {
   const btn = document.getElementById('btnVotar');
   btn.disabled = true; btn.textContent = 'Registrando...';
   try {
-    if (selId === 'outro') {
-      const safeKey = selName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'').slice(0,40);
-      await incSharedVote('spfc:vote:outro:' + safeKey);
-      await setSharedString('spfc:name:outro:' + safeKey, selName);
-    } else {
-      await incSharedVote('spfc:vote:' + selId);
-    }
+    await apiVote({
+      candidateId:   selId,
+      candidateName: selName,
+      nome:  document.getElementById('nome').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      cpf:   document.getElementById('cpf').value.trim(),
+      nasc:  document.getElementById('nasc').value.trim()
+    });
     localStorage.setItem(VOTED_KEY, '1');
     localStorage.setItem(VOTER_KEY, JSON.stringify({
       nome:  document.getElementById('nome').value.trim(),
@@ -552,14 +552,18 @@ async function renderResults(isNewVote = false) {
   document.getElementById('resultLoading').style.display = 'flex';
   document.getElementById('resultContent').style.display  = 'none';
 
-  const counts = await Promise.all(BASE_CANDIDATES.map(c => getSharedVoteCount('spfc:vote:' + c.id)));
-  const all = BASE_CANDIDATES.map((c,i) => ({...c, votes: counts[i]}));
-  const outroKeys = await listOutroKeys();
-  for (const key of outroKeys) {
-    const nameKey = key.replace('spfc:vote:outro:','spfc:name:outro:');
-    const [name, count] = await Promise.all([getSharedString(nameKey), getSharedVoteCount(key)]);
-    if (count > 0) all.push({id:key, name: name||key, votes: count});
-  }
+  const data = await apiResults();
+  const votesMap = data.votes || {};
+  const all = BASE_CANDIDATES.map(c => ({
+    ...c,
+    votes: votesMap[c.id] ? votesMap[c.id].count : 0
+  }));
+  // Adiciona candidatos "outro"
+  Object.entries(votesMap).forEach(([id, val]) => {
+    if (id === 'outro' || (id.startsWith('outro') && !BASE_CANDIDATES.find(c => c.id === id))) {
+      all.push({ id, name: val.name || id, votes: val.count || 0 });
+    }
+  });
 
   const total = all.reduce((a,c) => a + c.votes, 0);
   const max   = Math.max(0, ...all.map(c => c.votes));
